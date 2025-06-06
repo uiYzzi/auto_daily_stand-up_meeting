@@ -1,0 +1,26 @@
+name = "auto-daily-standup-worker"
+main = "build/worker/shim.mjs"
+compatibility_date = "2024-01-15"
+
+[build]
+command = "cargo install --force worker-build && worker-build --release"
+
+[vars]
+# 开发环境变量 - 请在 Cloudflare Workers 仪表板中设置生产环境变量
+# GITHUB_TOKEN = ""
+# OPENAI_API_KEY = ""
+OPENAI_BASE_URL = "https://api.siliconflow.cn/v1"
+OPENAI_MODEL = "THUDM/glm-4-9b-chat"
+# FEISHU_WEBHOOK_URL = ""
+
+[env.production.vars]
+# 生产环境变量将在 Cloudflare Workers 仪表板中设置
+# GITHUB_TOKEN = ""
+# OPENAI_API_KEY = ""
+OPENAI_BASE_URL = "https://api.siliconflow.cn/v1"
+OPENAI_MODEL = "THUDM/glm-4-9b-chat"
+# FEISHU_WEBHOOK_URL = ""
+
+# 定时任务 - 每天北京时间下午 6 点运行（UTC 时间上午 10 点），在代码中判断是否为中国法定工作日
+[triggers]
+crons = ["0 10 * * *"] 

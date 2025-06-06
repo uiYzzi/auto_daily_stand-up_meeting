@@ -1,16 +1,25 @@
 [package]
-name = "auto_daily_stand-up_meeting"
+name = "auto-daily-standup-worker"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
-reqwest = { version = "0.12", features = ["json"] }
-tokio = { version = "1.0", features = ["full"] }
+worker = "0.4.0"
+console_error_panic_hook = "0.1"
+wasm-bindgen = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde", "wasmbind"] }
+regex = "1.10"
 anyhow = "1.0"
-dotenv = "0.15"
-regex = "1.0"
-async-openai = "0.28"
 futures = "0.3"
+js-sys = "0.3"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "console",
+]
