@@ -42,7 +42,7 @@ pub struct PullRequestItem {
     pub active_lock_reason: Option<String>,
     pub draft: bool,
     pub pull_request: PullRequestInfo,
-    pub body: String,
+    pub body: Option<String>,
     pub reactions: Reactions,
     pub timeline_url: String,
     pub performed_via_github_app: Option<serde_json::Value>,
@@ -192,7 +192,8 @@ impl GitHubApiClient {
                 ));
                 
                 // 尝试从标题和描述中提取 Taiga issue 信息
-                let taiga_info = self.extract_taiga_info(&pr.title, &pr.body);
+                let body_content = pr.body.as_deref().unwrap_or("");
+                let taiga_info = self.extract_taiga_info(&pr.title, body_content);
                 if !taiga_info.is_empty() {
                     report.push_str(&format!("- 关联 Taiga：{}\n", taiga_info));
                 }
@@ -208,10 +209,12 @@ impl GitHubApiClient {
                 }
                 
                 // 添加 PR 描述的关键部分
-                if !pr.body.is_empty() {
-                    let summary = self.extract_work_summary(&pr.body);
-                    if !summary.is_empty() {
-                        report.push_str(&format!("- 工作内容摘要：{}\n", summary));
+                if let Some(body) = &pr.body {
+                    if !body.is_empty() {
+                        let summary = self.extract_work_summary(body);
+                        if !summary.is_empty() {
+                            report.push_str(&format!("- 工作内容摘要：{}\n", summary));
+                        }
                     }
                 }
                 
