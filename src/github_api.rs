@@ -104,7 +104,7 @@ impl GitHubApiClient {
     }
 
     /// 生成每日站会报告格式
-    pub fn generate_standup_report(&self, response: &GitHubSearchResponse) -> String {
+    pub async fn generate_standup_report(&self, response: &GitHubSearchResponse, db_client: Option<&crate::database::DatabaseClient<'_>>) -> String {
         let mut report = String::new();
         
         report.push_str("=== 每日站会报告数据 ===\n\n");
@@ -116,6 +116,38 @@ impl GitHubApiClient {
             report.push_str("今天没有创建任何 PR，可能没有代码提交工作完成。\n\n");
         } else {
             report.push_str("## PR 详细信息\n\n");
+            
+            // 收集所有的 Taiga URLs 用于批量处理
+            let mut taiga_urls = Vec::new();
+            for pr in &response.items {
+                let body_content = pr.body.as_deref().unwrap_or("");
+                let combined_text = format!("{} {}", pr.title, body_content);
+                
+                // 查找 Taiga URLs
+                let taiga_url_regex = regex::Regex::new(r"https://[^\s]+\.taiga\.io/project/[^/]+/task/\d+").unwrap();
+                for mat in taiga_url_regex.find_iter(&combined_text) {
+                    taiga_urls.push(mat.as_str().to_string()); // 转换为拥有所有权的字符串
+                }
+            }
+            
+            // 处理 Taiga URLs 并获取天数信息
+            let mut taiga_days_map = std::collections::HashMap::new();
+            if let Some(db_client) = db_client {
+                // 去重URLs
+                let unique_urls: Vec<&str> = taiga_urls.iter().map(|s| s.as_str()).collect::<std::collections::HashSet<_>>().into_iter().collect();
+                
+                match db_client.process_taiga_urls(unique_urls).await {
+                    Ok(results) => {
+                        for (task_key, days) in results {
+                            taiga_days_map.insert(task_key, days);
+                        }
+                        console_log!("✓ 成功处理 {} 个 Taiga 任务", taiga_days_map.len());
+                    }
+                    Err(e) => {
+                        console_log!("⚠️ 处理 Taiga 任务失败: {}", e);
+                    }
+                }
+            }
             
             for (index, pr) in response.items.iter().enumerate() {
                 report.push_str(&format!("### PR #{}\n", index + 1));
@@ -136,7 +168,20 @@ impl GitHubApiClient {
                 let body_content = pr.body.as_deref().unwrap_or("");
                 let taiga_info = self.extract_taiga_info(&pr.title, body_content);
                 if !taiga_info.is_empty() {
-                    report.push_str(&format!("- 关联 Taiga：{}\n", taiga_info));
+                    // 查找对应的 Taiga URL 并获取任务键
+                    let combined_text = format!("{} {}", pr.title, body_content);
+                    let taiga_url_regex = regex::Regex::new(r"https://[^\s]+\.taiga\.io/project/[^/]+/task/\d+").unwrap();
+                    
+                    let mut days_info = String::new();
+                    if let Some(mat) = taiga_url_regex.find(&combined_text) {
+                        if let Some(task_key) = crate::database::DatabaseClient::extract_task_key_from_url(mat.as_str()) {
+                            if let Some(days) = taiga_days_map.get(&task_key) {
+                                days_info = format!(" (累积{}天)", days);
+                            }
+                        }
+                    }
+                    
+                    report.push_str(&format!("- 关联 Taiga：{}{}\n", taiga_info, days_info));
                 }
                 
                 // 提取项目代号
@@ -224,14 +269,14 @@ impl GitHubApiClient {
 格式要求：
 - 有对应 Taiga issue 的：[天数]项目代号#Taiga编号-工作内容
 - 无对应 Taiga issue 的：[天数]工作内容
-- [天数] 是指这项工作到目前为止累积的天数
+- [天数] 是指这项工作到目前为止累积的天数（在原始数据中已经标注了累积天数）
 
 示例：
 [2]xxxAsk#3-重构登录逻辑
 [1]ktv#15-完成功能开发，准备测试
 [3]学习Flutter和Dart
 
-生成要求
+生成要求：
 
 1. 内容应简洁明了，避免冗长描述
 2. 机密项目应避免透露敏感信息
@@ -242,8 +287,10 @@ impl GitHubApiClient {
    - 已关闭未合并的 PR = 工作可能取消或需要重新开始
 5. 请自动提取项目代号，去除项目代号中无关部分，例如组织名、子模块名等等，例如 XXX-International-Corp/XXXX_flutter 提取为 XXXX，去除了XXX-International-Corp/和_flutter
 6. 项目代号不要全部大写！
+7. 优先使用原始数据中的累积天数信息，如果原始数据中标注了"(累积X天)"，则使用该天数
+8. 如果没有累积天数信息，根据 PR 状态推断是新工作还是持续工作
 
-请基于上述数据生成今日的站会报告内容。如果没有足够的信息推断天数，可以标记为 [1] 表示新开始的工作。
+请基于上述数据生成今日的站会报告内容。
 请输出纯文本，不要使用 markdown，不要包含任何 markdown 语法。
 为了避免涉密，请不要输出任何与项目相关的信息，尽量简要描述今天的工作内容就够了。"#.to_string()
     }

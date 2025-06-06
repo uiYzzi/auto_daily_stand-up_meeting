@@ -6,10 +6,12 @@ use wasm_bindgen::JsValue;
 mod github_api;
 mod ai_client;
 mod feishu_webhook;
+mod database;
 
 use github_api::GitHubApiClient;
 use ai_client::AIClient;
 use feishu_webhook::FeishuWebhook;
+use database::DatabaseClient;
 
 #[derive(Serialize, Deserialize)]
 struct HolidayResponse {
@@ -129,6 +131,14 @@ async fn generate_and_send_daily_standup(env: &Env) -> Result<String> {
         return Err(Error::RustError("FEISHU_WEBHOOK_URL 环境变量未设置".into()));
     }
 
+    // 初始化数据库
+    let db = env.d1("DB")?;
+    let db_client = DatabaseClient::new(&db);
+    
+    console_log!("初始化数据库表...");
+    db_client.init_tables().await
+        .map_err(|e| Error::RustError(format!("初始化数据库表失败: {}", e)))?;
+
     console_log!("开始获取今日 GitHub PR 数据...");
 
     // 创建 GitHub API 客户端
@@ -141,7 +151,7 @@ async fn generate_and_send_daily_standup(env: &Env) -> Result<String> {
     console_log!("✓ 成功获取 {} 个 PR", pr_response.total_count);
 
     // 生成站会报告数据
-    let standup_data = github_client.generate_standup_report(&pr_response);
+    let standup_data = github_client.generate_standup_report(&pr_response, Some(&db_client)).await;
 
     let final_report = if !openai_api_key.is_empty() {
         console_log!("正在使用 AI 生成格式化的站会报告...");

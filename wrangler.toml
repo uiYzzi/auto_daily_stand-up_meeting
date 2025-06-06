@@ -21,6 +21,12 @@ OPENAI_BASE_URL = "https://api.siliconflow.cn/v1"
 OPENAI_MODEL = "THUDM/glm-4-9b-chat"
 # FEISHU_WEBHOOK_URL = ""
 
+# D1 数据库绑定
+[[d1_databases]]
+binding = "DB"
+database_name = "auto-daily-standup-db"
+database_id = "4f023de8-c640-49d1-bf9f-19f169750325" # 需要在创建数据库后填入
+
 # 定时任务 - 每天北京时间下午 6 点运行（UTC 时间上午 10 点），在代码中判断是否为中国法定工作日
 [triggers]
 crons = ["0 10 * * *"] 
