@@ -1,2 +1,4 @@
 /target
 .env
+.wrangler
+node_modules
